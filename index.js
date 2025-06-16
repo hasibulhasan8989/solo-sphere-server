@@ -42,6 +42,31 @@ async function run() {
        
     })
 
+     app.delete('/job/:id',async (req,res)=>{
+        const id=req.params.id
+        const query={_id : new ObjectId(id)}
+        const result= await jobsCollection.deleteOne(query)
+        res.send(result)
+       
+    })
+
+    app.put('/job/:id',async(req,res)=>{
+      const id=req.params.id;
+      const job=req.body
+      const query={_id: new ObjectId(id)}
+
+      const updateDoc={ $set:{
+         ...job
+      }}
+
+      const options={upsert : true}
+      const result=await jobsCollection.updateOne(query,updateDoc,options)
+      res.send(result)
+
+
+
+    })
+
     app.post('/bits',async (req,res)=>{
         const bit=req.body
         const result= await bitCollection.insertOne(bit)
@@ -52,6 +77,17 @@ async function run() {
         const job=req.body;
         const result=await jobsCollection.insertOne(job)
         res.send(result)
+    })
+
+    app.get('/my-posted-jobs/:email',async(req,res)=>{
+        
+      const email=req.params.email;
+      const query={"buyer.email":email}
+      const result=await jobsCollection.find(query).toArray();
+      res.send(result)
+
+
+
     })
     
     await client.db("admin").command({ ping: 1 });
