@@ -2,10 +2,35 @@ const express = require("express");
 const app = express();
 const cors = require("cors");
 require("dotenv").config();
+const cookieParser = require("cookie-parser");
+const jwt = require("jsonwebtoken");
 const port = process.env.node || 9000;
 
 app.use(express.json());
-app.use(cors());
+app.use(cors({ origin: ["*", "http://localhost:5173"], credentials: true }));
+app.use(cookieParser());
+
+//jwt verify
+
+const verifyToken = (req, res, next) => {
+  const token = req.cookies.token;
+  if (!token) {
+    return res.status(401).send({ massage: "Unauthorized Access" });
+  }
+  if (token) {
+    jwt.verify(token, process.env.Access_Token_Secret, (err, decoded) => {
+      if (err) {
+        res.status(401).send({ massage: "Unauthorized Access" });
+        console.log(err);
+      }
+
+      if (decoded) {
+        req.tokenUser = decoded.user;
+        next();
+      }
+    });
+  }
+};
 
 const { MongoClient, ServerApiVersion, ObjectId } = require("mongodb");
 const uri = `mongodb+srv://${process.env.DB_USER}:${process.env.DB_PASSWORD}@cluster0.zsgh3ij.mongodb.net/?retryWrites=true&w=majority&appName=Cluster0`;
@@ -70,8 +95,13 @@ async function run() {
       res.send(result);
     });
 
-    app.get("/my-posted-jobs/:email", async (req, res) => {
+    app.get("/my-posted-jobs/:email", verifyToken, async (req, res) => {
+      const tokenUserEmail = req.tokenUser;
       const email = req.params.email;
+      if (tokenUserEmail !== email) {
+        return res.status(403).send({ massage: "Forbidden Access" });
+      }
+
       const query = { "buyer.email": email };
       const result = await jobsCollection.find(query).toArray();
       res.send(result);
@@ -107,6 +137,33 @@ async function run() {
 
       const result = await bitCollection.updateOne(query, updateDoc);
       res.send(result);
+    });
+
+    //generate jwt token
+    app.post("/jwt", async (req, res) => {
+      const user = req.body;
+      const token = jwt.sign(user, process.env.Access_Token_Secret, {
+        expiresIn: "30d",
+      });
+      res
+        .cookie("token", token, {
+          httpOnly: true,
+          secure: process.env.NODE_ENV === "production",
+          sameSite: process.env.NODE_ENV === "production" ? "none" : "strict",
+        })
+        .send({ success: true });
+    });
+
+    //remove jwt token
+
+    app.get(`/jwt/logout`, async (req, res) => {
+      res
+        .clearCookie("token", {
+          httpOnly: true,
+          secure: process.env.NODE_ENV === "production",
+          sameSite: process.env.NODE_ENV === "production" ? "none" : "strict",
+        })
+        .send({ success: true });
     });
 
     await client.db("admin").command({ ping: 1 });
